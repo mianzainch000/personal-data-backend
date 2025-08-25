@@ -10,8 +10,15 @@ const {
 } = require("../helper/authFunction");
 
 exports.signup = async (req, res) => {
+  const defaultCode = "109213123141947";
   try {
-    const { firstName, lastName, email, password } = req.body;
+    const { firstName, lastName, email, password, code } = req.body;
+
+    if (code !== defaultCode) {
+      return res
+        .status(403)
+        .send({ message: "Signup failed: code does not match default." });
+    }
 
     // Check for duplicate email
     let existingUserEmail = await User.findOne({ email });
@@ -24,6 +31,7 @@ exports.signup = async (req, res) => {
 
     // Create new user
     let user = new User({
+      code,
       firstName,
       lastName,
       email,
