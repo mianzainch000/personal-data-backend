@@ -16,10 +16,9 @@ const customSpecialCodeLimiter = (req, res, next) => {
   const ip = req.ip;
   const { specialCode: userCode } = req.body;
 
-  // Check existing record for this IP
-  const record = wrongCodeTracker.get(ip);
+  let record = wrongCodeTracker.get(ip);
 
-  // ✅ Agar already blocked hai aur time khatam nahi hua
+  // ✅ Check if user is already blocked
   if (record && record.blockUntil && record.blockUntil > Date.now()) {
     const hoursLeft = Math.ceil((record.blockUntil - Date.now()) / (60 * 60 * 1000));
     return res.status(429).json({
@@ -27,76 +26,61 @@ const customSpecialCodeLimiter = (req, res, next) => {
     });
   }
 
-  // ✅ Agar code blank hai to limiter skip karo
+  // ✅ Skip limiter if no special code provided
   if (!userCode || userCode.trim() === "") {
     return next();
   }
 
-  // ✅ Agar sahi code hai — lekin user blocked hai
+  // ✅ Correct code but previously blocked
   if (record && record.blockUntil && record.blockUntil > Date.now()) {
     const hoursLeft = Math.ceil((record.blockUntil - Date.now()) / (60 * 60 * 1000));
     return res.status(429).json({
-      message: `You are temporarily blocked due to wrong attempts. Try again after ${hoursLeft} hour${hoursLeft > 1 ? "s" : ""}.`,
+      message: `You are temporarily blocked. Try again after ${hoursLeft} hour${hoursLeft > 1 ? "s" : ""}.`,
     });
   }
 
-  // ✅ Agar sahi code hai (aur block nahi hai)
+  // ✅ Correct code and not blocked → allow & reset attempts
   if (userCode === specialCode) {
-    // Reset attempts
     wrongCodeTracker.delete(ip);
     return next();
   }
 
-  // ❌ Agar galat code hai
+  // ❌ Wrong code
   if (!record) {
-    wrongCodeTracker.set(ip, { attempts: 1, blockUntil: null });
+    record = { attempts: 1, blockUntil: null };
   } else {
     record.attempts += 1;
-    // Agar 3 ya zyada galti kar di to block karo
-    if (record.attempts >= MAX_ATTEMPTS) {
-      record.blockUntil = Date.now() + BLOCK_TIME;
-    }
-    wrongCodeTracker.set(ip, record);
   }
 
-  // ✅ Agar block ho gaya
-  if (record?.attempts >= MAX_ATTEMPTS) {
+  // ✅ If reached max attempts, block for 24h
+  if (record.attempts >= MAX_ATTEMPTS) {
+    record.blockUntil = Date.now() + BLOCK_TIME;
+  }
+
+  // ✅ Update record safely
+  wrongCodeTracker.set(ip, { ...record });
+
+  // ✅ If just got blocked
+  if (record.blockUntil) {
     const hoursLeft = Math.ceil((record.blockUntil - Date.now()) / (60 * 60 * 1000));
     return res.status(429).json({
       message: `Too many wrong special code attempts. You are blocked for ${hoursLeft} hour${hoursLeft > 1 ? "s" : ""}.`,
     });
-  } else {
-    // ✅ Galti hui lekin abhi block nahi hua
-    return res.status(400).json({
-      message: `Wrong special code. Attempts left: ${MAX_ATTEMPTS - record.attempts}`,
-    });
   }
+
+  // ✅ Still have attempts left
+  return res.status(400).json({
+    message: `Wrong special code. Attempts left: ${MAX_ATTEMPTS - record.attempts}`,
+  });
 };
 
 // ✅ Routes
-router.post(
-  "/signupMyPersonalData",
-  userController.validate("signup"),
-  userController.signup
-);
+router.post("/signupMyPersonalData", userController.validate("signup"), userController.signup);
 
-router.post(
-  "/login",
-  customSpecialCodeLimiter, // 👈 Custom limiter lagao
-  userController.validate("login"),
-  userController.login
-);
+router.post("/login", customSpecialCodeLimiter, userController.validate("login"), userController.login);
 
-router.post(
-  "/forgotPassword",
-  userController.validate("forgotPassword"),
-  userController.forgotPassword
-);
+router.post("/forgotPassword", userController.validate("forgotPassword"), userController.forgotPassword);
 
-router.post(
-  "/resetPassword/:tokenEmail",
-  userController.validate("resetPassword"),
-  userController.resetPassword
-);
+router.post("/resetPassword/:tokenEmail", userController.validate("resetPassword"), userController.resetPassword);
 
 module.exports = router;
