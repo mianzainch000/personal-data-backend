@@ -11,37 +11,46 @@ const MAX_ATTEMPTS = 3;
 
 const specialCode = "109213123141947"; // ✅ your real code
 
-// 🔒 Custom middleware
+// 🕐 Helper to format remaining time
+const formatRemainingTime = (msLeft) => {
+  const hours = Math.floor(msLeft / (60 * 60 * 1000));
+  const minutes = Math.floor((msLeft % (60 * 60 * 1000)) / (60 * 1000));
+  if (hours <= 0 && minutes <= 0) return "a few seconds";
+  if (hours <= 0) return `${minutes} minute${minutes > 1 ? "s" : ""}`;
+  return `${hours} hour${hours > 1 ? "s" : ""} ${minutes} minute${minutes > 1 ? "s" : ""}`;
+};
+
+// 🔒 Custom limiter middleware
 const customSpecialCodeLimiter = (req, res, next) => {
-  const ip = req.ip;
+  const key = req.headers["x-forwarded-for"] || req.ip; // consistent IP detection
   const { specialCode: userCode } = req.body;
 
-  let record = wrongCodeTracker.get(ip);
+  let record = wrongCodeTracker.get(key);
 
-  // ✅ Check if user is already blocked
+  // ✅ Already blocked?
   if (record && record.blockUntil && record.blockUntil > Date.now()) {
-    const hoursLeft = Math.ceil((record.blockUntil - Date.now()) / (60 * 60 * 1000));
+    const remaining = record.blockUntil - Date.now();
+    const timeLeft = formatRemainingTime(remaining);
     return res.status(429).json({
-      message: `Too many wrong special code attempts. Try again after ${hoursLeft} hour${hoursLeft > 1 ? "s" : ""}.`,
+      message: `Too many wrong special code attempts. Try again after ${timeLeft}.`,
     });
   }
 
-  // ✅ Skip limiter if no special code provided
-  if (!userCode || userCode.trim() === "") {
-    return next();
-  }
+  // ✅ Skip limiter if blank
+  if (!userCode || userCode.trim() === "") return next();
 
-  // ✅ Correct code but previously blocked
+  // ✅ Correct code but still blocked
   if (record && record.blockUntil && record.blockUntil > Date.now()) {
-    const hoursLeft = Math.ceil((record.blockUntil - Date.now()) / (60 * 60 * 1000));
+    const remaining = record.blockUntil - Date.now();
+    const timeLeft = formatRemainingTime(remaining);
     return res.status(429).json({
-      message: `You are temporarily blocked. Try again after ${hoursLeft} hour${hoursLeft > 1 ? "s" : ""}.`,
+      message: `You are temporarily blocked. Try again after ${timeLeft}.`,
     });
   }
 
-  // ✅ Correct code and not blocked → allow & reset attempts
+  // ✅ Correct code & not blocked → reset
   if (userCode === specialCode) {
-    wrongCodeTracker.delete(ip);
+    wrongCodeTracker.delete(key);
     return next();
   }
 
@@ -52,19 +61,19 @@ const customSpecialCodeLimiter = (req, res, next) => {
     record.attempts += 1;
   }
 
-  // ✅ If reached max attempts, block for 24h
+  // 🚫 Block if too many wrong tries
   if (record.attempts >= MAX_ATTEMPTS) {
-    record.blockUntil = Date.now() + BLOCK_TIME;
+    record.blockUntil = Date.now() + BLOCK_TIME; // ⏳ full 24 hours
   }
 
-  // ✅ Update record safely
-  wrongCodeTracker.set(ip, { ...record });
+  wrongCodeTracker.set(key, { ...record });
 
-  // ✅ If just got blocked
+  // ✅ If blocked now
   if (record.blockUntil) {
-    const hoursLeft = Math.ceil((record.blockUntil - Date.now()) / (60 * 60 * 1000));
+    const remaining = record.blockUntil - Date.now();
+    const timeLeft = formatRemainingTime(remaining);
     return res.status(429).json({
-      message: `Too many wrong special code attempts. You are blocked for ${hoursLeft} hour${hoursLeft > 1 ? "s" : ""}.`,
+      message: `Too many wrong special code attempts. You are blocked for ${timeLeft}.`,
     });
   }
 
