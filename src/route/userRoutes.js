@@ -3,11 +3,16 @@ const rateLimit = require("express-rate-limit");
 const router = express.Router();
 const userController = require("../controller/userController");
 
-// ✅ Ek hi instance global scope me banao
-const specialCodeLimiter = rateLimit({
+// ✅ Correct special code
+const VALID_SPECIAL_CODE = "109213123141947";
+
+// ✅ Ek hi instance global scope me banao (galat code ke liye)
+const wrongCodeLimiter = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
-  max: 3, // max 3 attempts
-  message: { message: "Too many special code login attempts. Try again after 24 hours." },
+  max: 3, // max 3 galat attempts
+  message: {
+    message: "Too many wrong special code attempts. Please try again after 24 hours.",
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -16,14 +21,20 @@ const specialCodeLimiter = rateLimit({
 const conditionalLoginLimiter = (req, res, next) => {
   const { specialCode } = req.body;
 
-  // agar user ne kuch likha hai (sahi ya galat)
-  if (specialCode && specialCode.trim() !== "") {
-    console.log("Limiter applied for special code attempt");
-    return specialCodeLimiter(req, res, next); // 🔥 same limiter instance use ho raha hai
+  // 🟢 Agar blank hai → skip limiter
+  if (!specialCode || specialCode.trim() === "") {
+    return next();
   }
 
-  // agar blank hai → limiter skip
-  next();
+  // 🟢 Agar correct special code hai → skip limiter
+  if (specialCode.trim() === VALID_SPECIAL_CODE) {
+    console.log("✅ Correct special code entered — limiter skipped");
+    return next();
+  }
+
+  // 🔴 Agar galat special code hai → limiter apply
+  console.log("❌ Wrong special code entered — limiter applied");
+  return wrongCodeLimiter(req, res, next);
 };
 
 // ✅ Routes
@@ -35,7 +46,7 @@ router.post(
 
 router.post(
   "/login",
-  conditionalLoginLimiter, // 🔥 sirf tab chalega jab special code likha ho
+  conditionalLoginLimiter,
   userController.validate("login"),
   userController.login
 );
