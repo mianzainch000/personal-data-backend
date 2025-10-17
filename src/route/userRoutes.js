@@ -1,40 +1,72 @@
 const express = require("express");
-const rateLimit = require("express-rate-limit");
 const router = express.Router();
 const userController = require("../controller/userController");
 
-// ✅ Correct special code
-const VALID_SPECIAL_CODE = "109213123141947";
+// 🧠 Memory-based tracker (IP + wrong attempts)
+const wrongCodeTracker = new Map();
 
-// ✅ Ek hi instance global scope me banao (galat code ke liye)
-const wrongCodeLimiter = rateLimit({
-  windowMs: 24 * 60 * 60 * 1000, // 24 hours
-  max: 3, // max 3 galat attempts
-  message: {
-    message: "Too many wrong special code attempts. Please try again after 24 hours.",
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// 🕒 24 hours in milliseconds
+const BLOCK_TIME = 24 * 60 * 60 * 1000;
+const MAX_ATTEMPTS = 3;
 
-// ✅ Conditional middleware
-const conditionalLoginLimiter = (req, res, next) => {
-  const { specialCode } = req.body;
+const specialCode = "109213123141947"; // ✅ your real code
 
-  // 🟢 Agar blank hai → skip limiter
-  if (!specialCode || specialCode.trim() === "") {
+// 🔒 Custom middleware
+const customSpecialCodeLimiter = (req, res, next) => {
+  const ip = req.ip;
+  const { specialCode: userCode } = req.body;
+
+  // Check existing record for this IP
+  const record = wrongCodeTracker.get(ip);
+
+  // Agar already blocked hai aur block time khatam nahi hua
+  if (record && record.blockUntil && record.blockUntil > Date.now()) {
+    const hoursLeft = Math.ceil((record.blockUntil - Date.now()) / (60 * 60 * 1000));
+    return res.status(429).json({
+      message: `Too many wrong special code attempts. Try again after ${hoursLeft} hours.`,
+    });
+  }
+
+  // Agar code blank hai to limiter skip karo
+  if (!userCode || userCode.trim() === "") {
     return next();
   }
 
-  // 🟢 Agar correct special code hai → skip limiter
-  if (specialCode.trim() === VALID_SPECIAL_CODE) {
-    console.log("✅ Correct special code entered — limiter skipped");
+  // ✅ Agar sahi code hai — lekin user already blocked hai
+  if (record && record.blockUntil && record.blockUntil > Date.now()) {
+    return res.status(429).json({
+      message: "Your access is temporarily blocked due to wrong attempts.",
+    });
+  }
+
+  // ✅ Agar sahi code hai (aur blocked nahi hai)
+  if (userCode === specialCode) {
+    // Reset attempts
+    wrongCodeTracker.delete(ip);
     return next();
   }
 
-  // 🔴 Agar galat special code hai → limiter apply
-  console.log("❌ Wrong special code entered — limiter applied");
-  return wrongCodeLimiter(req, res, next);
+  // ❌ Agar galat code hai
+  if (!record) {
+    wrongCodeTracker.set(ip, { attempts: 1, blockUntil: null });
+  } else {
+    record.attempts += 1;
+    // Agar 3 ya usse zyada galti kar di
+    if (record.attempts >= MAX_ATTEMPTS) {
+      record.blockUntil = Date.now() + BLOCK_TIME;
+    }
+    wrongCodeTracker.set(ip, record);
+  }
+
+  if (record?.attempts >= MAX_ATTEMPTS) {
+    return res.status(429).json({
+      message: "Too many wrong special code attempts. You are blocked for 24 hours.",
+    });
+  } else {
+    return res.status(400).json({
+      message: `Wrong special code. Attempts left: ${MAX_ATTEMPTS - record.attempts}`,
+    });
+  }
 };
 
 // ✅ Routes
@@ -46,7 +78,7 @@ router.post(
 
 router.post(
   "/login",
-  conditionalLoginLimiter,
+  customSpecialCodeLimiter, // 👈 Custom limiter lagao
   userController.validate("login"),
   userController.login
 );
