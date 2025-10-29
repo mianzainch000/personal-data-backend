@@ -1,5 +1,5 @@
 require("dotenv").config();
-const User = require("../model/userSchema");
+const User = require("../models/userSchema");
 const nodemailer = require("nodemailer");
 const ForgetPasswordEmail = require("../emailTemplate");
 const { check, validationResult } = require("express-validator");
