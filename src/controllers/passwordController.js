@@ -23,7 +23,7 @@ exports.createPassword = async (req, res) => {
 exports.getPasswords = async (req, res) => {
     try {
         const passwords = await Password.find({ userId: req.user._id }).sort({
-            createdAt: -1,
+            createdAt: 1,
         });
         res.status(200).json({ success: true, data: passwords });
     } catch (err) {
