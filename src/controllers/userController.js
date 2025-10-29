@@ -17,15 +17,9 @@ exports.signup = async (req, res) => {
     let errorMsg = errors.array()[0].msg;
     return res.status(400).json({ errors: errorMsg });
   }
-  const defaultCode = "109213123141947";
+
   try {
     const { firstName, lastName, email, password, code } = req.body;
-
-    if (code !== defaultCode) {
-      return res
-        .status(403)
-        .send({ message: "Signup failed: code does not match default." });
-    }
 
     // Check for duplicate email
     let existingUserEmail = await User.findOne({ email });
@@ -63,21 +57,19 @@ exports.signup = async (req, res) => {
 
 exports.login = async (req, res) => {
   const errors = validationResult(req);
-
   if (!errors.isEmpty()) {
     let errorMsg = errors.array()[0].msg;
     return res.status(400).json({ errors: errorMsg });
   }
+
   try {
-    const { email, password } = req.body;
+    const { email, password, specialCode } = req.body;
 
     const user = await User.findOne({ email });
-
     if (!user) {
       return res.status(404).json({ message: "Invalid email" });
     }
 
-    // Compare password with hashed password stored in the database
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid password" });
@@ -86,26 +78,27 @@ exports.login = async (req, res) => {
     const userResponse = user.toObject();
     delete userResponse.password;
 
-    // Get the expiration time from environment variable or use a default value
-    const expiresIn = process.env.JWT_EXPIRATION;
-
-    // Use generateToken function to create JWT token
     const token = generateToken(
       { userId: userResponse._id },
       process.env.SECRET_KEY,
-      expiresIn
+      process.env.JWT_EXPIRATION
     );
 
-    // Send response with user data and token
+    // ✅ check if code matches
+    const hasAccess = user.code === specialCode;
+
     return res.status(200).send({
       message: "Login successful",
       user: userResponse,
-      token: token,
+      token,
+      hasAccess, // ✅ include flag for frontend
     });
   } catch (error) {
+    console.error("Login Error:", error.message);
     res.status(500).json({ message: "Internal Server Error." });
   }
 };
+
 
 exports.forgotPassword = async (req, res) => {
   const errors = validationResult(req);
