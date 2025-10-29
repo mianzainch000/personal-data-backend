@@ -42,16 +42,28 @@ exports.updatePassword = async (req, res) => {
     }
 };
 
-// 🔴 Delete password entry
+
+
+
 exports.deletePassword = async (req, res) => {
     try {
-        const deleted = await Password.findByIdAndDelete(req.params.id);
-        if (!deleted)
-            return res
-                .status(404)
-                .json({ success: false, message: "Password entry not found" });
-        res.status(200).json({ success: true, message: "Deleted successfully" });
+        const { id } = req.params;
+        const deletedProduct = await Password.deleteOne({
+            _id: id,
+        });
+
+        if (deletedProduct.deletedCount > 0) {
+            return res.status(200).send({
+                message: "Product deleted successfully",
+                productId: id,
+            });
+        } else {
+            return res.status(404).send({
+                message: "Product not found",
+            });
+        }
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error(error);
+        res.status(500).send({ message: "Internal Server Error." });
     }
 };

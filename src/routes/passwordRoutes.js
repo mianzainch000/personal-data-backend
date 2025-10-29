@@ -14,9 +14,10 @@ router.post("/create", createPassword);
 router.get("/get", getPasswords);
 
 // 🟡 Update by ID
-router.put("/update:id", updatePassword);
+router.put("/update/:id", updatePassword);
 
 // 🔴 Delete by ID
-router.delete("/delete:id", deletePassword);
+router.delete("/delete/:id", deletePassword);
+
 
 module.exports = router;
