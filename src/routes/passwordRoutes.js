@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const authenticate = require("../middleware/authenticate");
 const {
     createPassword,
     getPasswords,
@@ -7,17 +8,9 @@ const {
     deletePassword,
 } = require("../controllers/passwordController");
 
-// 🟢 Create new password
-router.post("/create", createPassword);
-
-// 🔵 Get all passwords
-router.get("/get", getPasswords);
-
-// 🟡 Update by ID
-router.put("/update/:id", updatePassword);
-
-// 🔴 Delete by ID
-router.delete("/delete/:id", deletePassword);
-
+router.post("/create", authenticate, createPassword);
+router.get("/get", authenticate, getPasswords);
+router.put("/update/:id", authenticate, updatePassword);
+router.delete("/delete/:id", authenticate, deletePassword);
 
 module.exports = router;

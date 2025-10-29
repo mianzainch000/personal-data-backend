@@ -79,7 +79,7 @@ exports.login = async (req, res) => {
     delete userResponse.password;
 
     const token = generateToken(
-      { userId: userResponse._id },
+      { _id: userResponse._id },
       process.env.SECRET_KEY,
       process.env.JWT_EXPIRATION
     );
@@ -98,7 +98,6 @@ exports.login = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error." });
   }
 };
-
 
 exports.forgotPassword = async (req, res) => {
   const errors = validationResult(req);
